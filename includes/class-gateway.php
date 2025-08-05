@@ -13,6 +13,10 @@ if (!class_exists('WC_Payment_Gateway')) {
 class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 
 	private $api_key;
+	private $secret_key;
+	private $confirmation;
+	private $debug = false;
+	private $logger;
 
 
 	/**
