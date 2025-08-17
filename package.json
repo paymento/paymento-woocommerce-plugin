@@ -1,0 +1,29 @@
+{
+  "name": "paymento-crypto-gateway",
+  "version": "1.0.0",
+  "description": "Non-Custodial Crypto Payment Gateway for WooCommerce",
+  "main": "index.js",
+  "scripts": {
+    "build": "wp-scripts build assets/js/frontend/blocks.js --output-path=assets/js/frontend/",
+    "start": "wp-scripts start assets/js/frontend/blocks.js --output-path=assets/js/frontend/",
+    "lint:js": "wp-scripts lint-js assets/js/",
+    "format": "wp-scripts format assets/js/"
+  },
+  "devDependencies": {
+    "@wordpress/scripts": "^27.0.0"
+  },
+  "dependencies": {
+    "@wordpress/element": "^5.0.0",
+    "@wordpress/html-entities": "^3.0.0",
+    "@wordpress/i18n": "^4.0.0"
+  },
+  "keywords": [
+    "woocommerce",
+    "payment-gateway",
+    "cryptocurrency",
+    "bitcoin",
+    "ethereum"
+  ],
+  "author": "Paymento.io",
+  "license": "GPL-2.0-or-later"
+}

@@ -1,9 +1,11 @@
 === Paymento – Non-Custodial Crypto Payment Gateway for WooCommerce ===  
 Contributors: paymento  
 Tags: Tags: crypto payments, Bitcoin, Ethereum, payment gateway, crypto gateway
-Requires at least: 5.8  
-Tested up to: 6.7
-Requires PHP: 7.4  
+Requires at least: 6.0  
+Tested up to: 6.8
+Requires PHP: 8.0
+WC requires at least: 8.0
+WC tested up to: 8.4  
 Stable tag: 1.0.0  
 License: GPL-2.0-or-later  
 License URI: https://www.gnu.org/licenses/gpl-2.0.html  
@@ -23,14 +25,16 @@ Paymento allows businesses and individuals to accept cryptocurrency payments **d
 ✔ **Multi-Chain Support** – Accept Bitcoin, Ethereum, USDT (ERC20 & TRC20), and more.  
 ✔ **Secure & Private** – Non-custodial solution with no private key access required.  
 ✔ **Easy WooCommerce Integration** – Install, configure, and start accepting crypto in minutes.  
+✔ **WooCommerce Blocks Compatible** – Works with both classic and modern block-based checkout.  
+✔ **HPOS Compatible** – Full support for High-Performance Order Storage.  
 ✔ **Low Transaction Fees** – Save costs compared to traditional payment gateways.  
 ✔ **Developer-Friendly API** – Expand functionality with simple API calls.  
 
 == Requirements ==
 
-- WordPress 5.0 or higher
-- WooCommerce 3.0 or higher
-- PHP 7.0 or higher
+- WordPress 6.0 or higher
+- WooCommerce 8.0 or higher
+- PHP 8.0 or higher
 - A Paymento merchant account
 
 == Installation ==
