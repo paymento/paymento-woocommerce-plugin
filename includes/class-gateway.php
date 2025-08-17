@@ -7,9 +7,19 @@ if ( ! defined( 'PAYMENTOGW_URL' ) ) {
     define( 'PAYMENTOGW_URL', plugin_dir_url(dirname(__FILE__)) ); // Correct path
 }
 
-if (!class_exists('WC_Payment_Gateway')) {
+// Check if WooCommerce Payment Gateway class exists
+if ( ! class_exists( 'WC_Payment_Gateway' ) ) {
 	return;
 }
+
+/**
+ * Paymento Payment Gateway Class
+ *
+ * @class WC_PAYMENTO_Gateway
+ * @extends WC_Payment_Gateway
+ * @version 1.0.0
+ * @package Paymento
+ */
 class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 
 	private $api_key;
@@ -34,13 +44,22 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 
 		$this->id = 'paymento_gateway';
 		$this->icon = PAYMENTOGW_URL.'assets/images/paymento-badge.png';
-		$this->has_fields = true;
-		$this->method_title = __('Paymento', 'paymento-crypto-gateway');
-		$this->method_description = __('Paymento non-custodial crypto payment gateway for Woocommerce', 'paymento-crypto-gateway');
+		$this->has_fields = false; // No checkout form fields needed - redirects to external payment page
+		$this->method_title = 'Paymento';
+		$this->method_description = 'Paymento non-custodial crypto payment gateway for Woocommerce';
+		
+		// Declare support for WooCommerce features
+		$this->supports = array(
+			'products',
+			'refunds',
+		);
 
 		// Load the settings.
 		$this->init_form_fields();
 		$this->init_settings();
+
+		// Set translatable strings after textdomain is loaded
+		add_action('init', array($this, 'init_translatable_strings'), 20);
 
 		// Define user set variables
 		$this->title = $this->get_option('title');
@@ -69,7 +88,13 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 
 	}
 
-
+	/**
+	 * Initialize translatable strings after textdomain is loaded
+	 */
+	public function init_translatable_strings() {
+		$this->method_title = __('Paymento', 'paymento-crypto-gateway');
+		$this->method_description = __('Paymento non-custodial crypto payment gateway for Woocommerce', 'paymento-crypto-gateway');
+	}
 
 	function paymento_admin_enqueue($hook) {
 		if ($hook !== 'woocommerce_page_wc-settings') return;
@@ -149,7 +174,12 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
         }
 
         $order_id = absint($result['OrderId']);
-        $order_status = $result['OrderStatus'];
+        $order_status = absint($result['OrderStatus']);
+        
+        if ($order_id <= 0) {
+            $this->log('Invalid order ID in webhook');
+            return;
+        }
 
         $order = wc_get_order($order_id);
         if (!$order) {
@@ -262,6 +292,11 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 	}
 
 	public static function wk_get_merchant_callback($request) {
+		// Check permissions
+		if (!current_user_can('manage_woocommerce')) {
+			return new WP_REST_Response(array('error' => 'Insufficient permissions'), 403);
+		}
+
 		// Retrieve the API key from headers
 		$api_key = $request->get_header('Api-Key');
 	
@@ -330,7 +365,8 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 					// BOOM! Payment completed!
 					// $this->update_option( 'debug', '7' . json_encode($result));
 
-					$payment_token = get_post_meta( $order_id, 'paymento-payment-token', true );
+					$order = wc_get_order($order_id);
+					$payment_token = $order->get_meta('paymento-payment-token');
 
 					$payload = array(
 						'token' => $payment_token,
@@ -484,18 +520,31 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 	public function process_payment($order_id)
 	{
 		$order = wc_get_order($order_id);
+		
+		// Check if API key is configured
+		if ( empty( $this->get_option('api_key') ) ) {
+			wc_add_notice( __('Payment error: Paymento API key not configured. Please contact the store administrator.', 'paymento-crypto-gateway'), 'error' );
+			return array(
+				'result' => 'failure',
+				'messages' => __('Payment error: Paymento API key not configured.', 'paymento-crypto-gateway')
+			);
+		}
+		
 		return array(
 			'result' => 'success',
-			'redirect' => $order->get_checkout_payment_url($order),
+			'redirect' => $order->get_checkout_payment_url(true), // true = SSL
 		);
 	}
 
 
 	public function get_payment_token($order_id){
+		$order = wc_get_order( $order_id );
+		if (!$order) {
+			throw new Exception(__('Invalid order', 'paymento-crypto-gateway'));
+		}
+		
 		$callback_url = add_query_arg('wc_order', $order_id, WC()->api_request_url('WC_PAYMENTO_Gateway'));
 		$confirmation =  $this->get_option('confirmation');
-
-		$order = wc_get_order( $order_id );
 		$currency = $order->get_order_currency();
 		$cart_hash = $order->get_cart_hash();
 		$total = $order->get_total();
@@ -530,17 +579,29 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 		if (is_wp_error($response)) {
 			// Handle error
 			$error_message = esc_html($response->get_error_message());
-			throw new Exception(esc_html($error_message));
+			$this->log('Payment request failed: ' . $error_message);
+			wc_add_notice( __('Payment error: Unable to connect to payment service. Please try again.', 'paymento-crypto-gateway'), 'error' );
+			wp_redirect(wc_get_checkout_url());
+			exit;
 		}
 		
 		$body = wp_remote_retrieve_body($response);
 		$result = json_decode($body, true);
 		
+		// Validate API response
+		if ( !$result || !isset($result['body']) || empty($result['body']) ) {
+			$this->log('Invalid API response: ' . $body);
+			wc_add_notice( __('Payment error: Invalid response from payment service. Please try again.', 'paymento-crypto-gateway'), 'error' );
+			wp_redirect(wc_get_checkout_url());
+			exit;
+		}
+		
 		$order = wc_get_order($order_id);
-		$order->update_meta_data('paymento-payment-token', esc_html($result['body']));
+		$payment_token = sanitize_text_field($result['body']);
+		$order->update_meta_data('paymento-payment-token', $payment_token);
 		$order->save();
 		
-		$send_to_bank_url = add_query_arg('token', esc_html($result['body']), 'https://app.paymento.io/gateway');
+		$send_to_bank_url = add_query_arg('token', urlencode($payment_token), 'https://app.paymento.io/gateway');
 		wp_redirect($send_to_bank_url, 301);
 		exit;
 	}
@@ -558,17 +619,23 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 
 		if ( isset($_GET['wc_order']) ) {
 			$order_id = absint( $_GET['wc_order'] );
+		} else {
+			wp_die( __('Invalid order ID', 'paymento-crypto-gateway') );
 		}
 		$confirmation_type = $this->get_option('confirmation');
 
 		if ( isset($order_id) && !empty($order_id) ) {
 			$order = wc_get_order($order_id);
+			if (!$order) {
+				wp_die( __('Order not found', 'paymento-crypto-gateway') );
+			}
+			
 			if ($order->get_status() !== 'completed' && $order->get_status() !== 'processing') {
 
 				// Get data from Paymento
-				$OrderId = isset($_REQUEST['OrderId']) ? sanitize_text_field(wp_unslash($_REQUEST['OrderId'])) : '';
-				$OrderStatus = isset($_REQUEST['status']) ? sanitize_text_field(wp_unslash($_REQUEST['status'])) : '';
-				$payment_token = get_post_meta( $order_id, 'paymento-payment-token', true );
+				$OrderId = isset($_REQUEST['OrderId']) ? absint($_REQUEST['OrderId']) : 0;
+				$OrderStatus = isset($_REQUEST['status']) ? absint($_REQUEST['status']) : 0;
+				$payment_token = $order->get_meta('paymento-payment-token');
 
 				if( $OrderStatus == 7 && ( $confirmation_type == 1) ) {
 					// BOOM! Payment completed!
@@ -637,7 +704,7 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 	public function show_transaction_in_order($total_rows, $order) {
 		$gateway = $order->get_payment_method();
 		if ($gateway === $this->id) {
-			$trace_number = get_post_meta( $order->id, 'paymento_payment_id', true );
+			$trace_number = $order->get_meta('paymento_payment_id');
 			$total_rows['trace_number'] = array(
 				'label' => __( 'Tracking Code:', 'paymento-crypto-gateway' ),
 				'value' => $trace_number
@@ -652,6 +719,24 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 
 
 }
+
+/**
+ * Add Paymento Gateway to WooCommerce
+ *
+ * @param array $gateways
+ * @return array
+ */
+if ( ! function_exists( 'add_paymento_gateway_to_wc' ) ) {
+	function add_paymento_gateway_to_wc( $gateways ) {
+		if ( class_exists( 'WC_PAYMENTO_Gateway' ) ) {
+			$gateways[] = 'WC_PAYMENTO_Gateway';
+		}
+		return $gateways;
+	}
+}
+
+// Register the payment gateway with WooCommerce
+add_filter( 'woocommerce_payment_gateways', 'add_paymento_gateway_to_wc' );
 
 
 
