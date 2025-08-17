@@ -1,12 +1,12 @@
 === Paymento – Non-Custodial Crypto Payment Gateway for WooCommerce ===  
 Contributors: paymento  
-Tags: Tags: crypto payments, Bitcoin, Ethereum, payment gateway, crypto gateway
+Tags: crypto payments, Bitcoin, Ethereum, payment gateway, crypto gateway, woocommerce, non-custodial, USDT
 Requires at least: 6.0  
 Tested up to: 6.8
 Requires PHP: 8.0
 WC requires at least: 8.0
 WC tested up to: 8.4  
-Stable tag: 1.0.0  
+Stable tag: 1.2.0  
 License: GPL-2.0-or-later  
 License URI: https://www.gnu.org/licenses/gpl-2.0.html  
 Text Domain: paymento-crypto-gateway
@@ -61,25 +61,6 @@ Paymento allows businesses and individuals to accept cryptocurrency payments **d
 6. Optionally enable Debug Log for troubleshooting.
 7. Click "Save changes" to apply your settings.
 
-== Frequently Asked Questions ==
-= Does this plugin require an external API? =
-Yes, this plugin connects to Paymento's API to process crypto payments securely.
-
-= What are the costs associated with using Paymento? =
-The Paymento plugin is completely free to install and use. However, there is a 0.5% transaction fee per payment processed. Paymento also provides $100 in free credit, allowing you to process up to 20,000 transactions at no cost. After reaching this limit, the standard 0.5% transaction fee applies.
-
-=  Does Paymento require my private key?  =
-No, Paymento never asks for your private key. Paymento is a non-custodial payment gateway, meaning you remain in full control of your funds. You only need to share your XPUB (Extended Public Key) and account address with Paymento to generate payment addresses and track transactions securely.
-
-
-== Changelog ==
-= 1.0.0 =
-* Initial release.
-
-== Upgrade Notice ==
-= 1.0.0 =
-First stable release.
-
 == Usage ==
 
 Once configured, the Paymento payment option will appear on your WooCommerce checkout page. Customers can select this option to pay with cryptocurrency.
@@ -127,6 +108,26 @@ By using this plugin, your WooCommerce store communicates with **Paymento API**.
 
 This ensures users are **fully aware** of the data being sent and why. 🚀  
 
+== Frequently Asked Questions ==
+
+= Does this plugin require an external API? =
+Yes, this plugin connects to Paymento's API to process crypto payments securely.
+
+= What are the costs associated with using Paymento? =
+The Paymento plugin is completely free to install and use. However, there is a 0.5% transaction fee per payment processed. Paymento also provides $100 in free credit, allowing you to process up to 20,000 transactions at no cost. After reaching this limit, the standard 0.5% transaction fee applies.
+
+= Does Paymento require my private key? =
+No, Paymento never asks for your private key. Paymento is a non-custodial payment gateway, meaning you remain in full control of your funds. You only need to share your XPUB (Extended Public Key) and account address with Paymento to generate payment addresses and track transactions securely.
+
+= Is this plugin compatible with WooCommerce Blocks? =
+Yes! The plugin is fully compatible with both classic WooCommerce checkout and the modern WooCommerce Blocks checkout experience.
+
+= Does this work with High-Performance Order Storage (HPOS)? =
+Absolutely! The plugin is fully compatible with WooCommerce's HPOS feature for improved performance.
+
+= What cryptocurrencies are supported? =
+Paymento supports Bitcoin, Ethereum, USDT (both ERC20 and TRC20), and many other cryptocurrencies. Check the Paymento dashboard for the complete list.
+
 == Troubleshooting ==
 
 If you encounter any issues:
@@ -143,6 +144,74 @@ For support, please open an issue on the GitHub repository or contact Paymento s
 == Contributing ==
 
 Contributions to improve the plugin are welcome. Please fork the repository and submit a pull request with your changes.
+
+== Changelog ==
+
+= 1.2.0 - 2025-01-17 =
+**🚀 Major Update - Modern Standards & Enhanced Compatibility**
+
+**✨ New Features:**
+* ✅ **WooCommerce Blocks Support** - Full compatibility with modern block-based checkout
+* ✅ **HPOS Compatibility** - Support for High-Performance Order Storage (WooCommerce 8.2+)
+* ✅ **Enhanced Security** - Improved validation, capability checks, and error handling
+* ✅ **Better User Experience** - Fixed infinite loading issues in checkout
+* ✅ **Translation Improvements** - Proper textdomain loading timing
+
+**🔧 Technical Improvements:**
+* Fixed payment gateway registration timing issues
+* Enhanced input sanitization and validation
+* Improved error handling with user-friendly messages
+* Better API response validation
+* WordPress coding standards compliance
+* Modern plugin structure following NOWPayments pattern
+* Fixed translation loading warnings
+
+**🛡️ Security Enhancements:**
+* Added proper capability checks for admin functions
+* Enhanced webhook signature validation
+* Improved order data access patterns (HPOS-ready)
+* Better input sanitization throughout
+
+**🐛 Bug Fixes:**
+* Fixed infinite loading when selecting payment method
+* Resolved translation domain loading warnings
+* Fixed plugin registration timing conflicts
+* Improved error messages for missing API credentials
+
+**📋 Requirements Updated:**
+* WordPress 6.0+ (was 5.0+)
+* WooCommerce 8.0+ (was 3.0+)  
+* PHP 8.0+ (was 7.0+)
+
+= 1.0.0 - 2025-01-16 =
+**🎉 Initial Release**
+
+**✨ Basic Features:**
+* Non-custodial crypto payment gateway integration
+* Support for Bitcoin, Ethereum, USDT (ERC20 & TRC20)
+* Direct wallet payments - no intermediaries
+* Basic webhook integration for payment notifications
+* Debug logging for troubleshooting
+* Two confirmation types: Immediate redirect or wait for confirmation
+
+**🔧 Initial Technical Implementation:**
+* REST API endpoints for webhook handling
+* Basic input validation
+* Translation ready (paymento-crypto-gateway domain)
+* Compatible with WooCommerce 3.0+
+
+**🛡️ Basic Security:**
+* HMAC SHA256 webhook signature validation
+* Secure API communication with Paymento
+* No private key requirements
+
+== Upgrade Notice ==
+
+= 1.2.0 =
+🚀 **Major Update!** Adds WooCommerce Blocks support, HPOS compatibility, enhanced security, and fixes checkout loading issues. Update recommended for all users.
+
+= 1.0.0 =
+🎉 First stable release of Paymento for WooCommerce! Start accepting Bitcoin, Ethereum, and USDT payments directly into your wallet with zero custody risk.
 
 == License ==
 
