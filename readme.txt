@@ -61,6 +61,25 @@ Paymento allows businesses and individuals to accept cryptocurrency payments **d
 6. Optionally enable Debug Log for troubleshooting.
 7. Click "Save changes" to apply your settings.
 
+== Frequently Asked Questions ==
+= Does this plugin require an external API? =
+Yes, this plugin connects to Paymento's API to process crypto payments securely.
+
+= What are the costs associated with using Paymento? =
+The Paymento plugin is completely free to install and use. However, there is a 0.5% transaction fee per payment processed. Paymento also provides $100 in free credit, allowing you to process up to 20,000 transactions at no cost. After reaching this limit, the standard 0.5% transaction fee applies.
+
+=  Does Paymento require my private key?  =
+No, Paymento never asks for your private key. Paymento is a non-custodial payment gateway, meaning you remain in full control of your funds. You only need to share your XPUB (Extended Public Key) and account address with Paymento to generate payment addresses and track transactions securely.
+
+
+== Changelog ==
+= 1.0.0 =
+* Initial release.
+
+== Upgrade Notice ==
+= 1.0.0 =
+First stable release.
+
 == Usage ==
 
 Once configured, the Paymento payment option will appear on your WooCommerce checkout page. Customers can select this option to pay with cryptocurrency.
