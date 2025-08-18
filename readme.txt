@@ -6,7 +6,7 @@ Tested up to: 6.8
 Requires PHP: 8.0
 WC requires at least: 8.0
 WC tested up to: 8.4  
-Stable tag: 1.2.0  
+Stable tag: 1.2.1  
 License: GPL-2.0-or-later  
 License URI: https://www.gnu.org/licenses/gpl-2.0.html  
 Text Domain: paymento-crypto-gateway
@@ -147,6 +147,21 @@ Contributions to improve the plugin are welcome. Please fork the repository and 
 
 == Changelog ==
 
+= 1.2.1 - 2025-01-17 =
+**🔧 Bug Fixes & Improvements**
+
+**✨ Fixed:**
+* ✅ **Merchant Name Display** - Fixed authentication issues preventing merchant info from loading in admin settings
+* ✅ **Admin Authentication** - Replaced JavaScript-based API calls with server-side PHP implementation
+* ✅ **Better Error Handling** - Improved error messages for API connection issues
+* ✅ **Automatic IPN Setup** - Webhook URL configuration now happens automatically when merchant info loads
+
+**🔧 Technical Improvements:**
+* Eliminated REST API authentication conflicts in admin area
+* Server-side merchant information retrieval for better reliability
+* Cleaner JavaScript code with reduced complexity
+* Enhanced error reporting for troubleshooting
+
 = 1.2.0 - 2025-01-17 =
 **🚀 Major Update - Modern Standards & Enhanced Compatibility**
 
@@ -206,6 +221,9 @@ Contributions to improve the plugin are welcome. Please fork the repository and 
 * No private key requirements
 
 == Upgrade Notice ==
+
+= 1.2.1 =
+🔧 **Bug Fix Update!** Fixes merchant name display issues in admin settings. Now uses reliable server-side authentication instead of JavaScript. Recommended update for better admin experience.
 
 = 1.2.0 =
 🚀 **Major Update!** Adds WooCommerce Blocks support, HPOS compatibility, enhanced security, and fixes checkout loading issues. Update recommended for all users.
