@@ -23,27 +23,7 @@ jQuery(function($) {
             }
         });
     
-        var paymento_merchant_name = document.getElementById("paymento_merchant_name");
-        var req2 = $.get({
-            url: paymento_vars.rest_url + 'paymento/merchant', // Use dynamic REST API URL
-            data,
-            headers: {
-                'Api-Key': paymento_vars.api_key, // Use the localized variable from PHP
-                'Content-Type': 'application/json',
-            },
-            error: function(XMLHttpRequest, textStatus, errorThrown) {
-                paymento_merchant_name.innerHTML = '<span style="padding:5px 10px; background-color:#f52f57; color:#fff;border-radius:5px;">Error</span>';
-            },
-            success: function(response) {
-                console.log(response);
-                if (response.success == true) {
-                    var status = response.body.isActive ? 'Active' : 'Not Active';
-                    paymento_merchant_name.innerHTML = '<span style="padding:5px 10px; background-color:#83f28f;border-radius:5px;">' + response.body.name + ' (' + status + ') </span>';
-                } else {
-                    paymento_merchant_name.innerHTML = '<span style="padding:5px 10px; background-color:#f52f57;color:#fff;border-radius:5px;">Bad</span>';
-                }
-            }
-    });
+        // Merchant name is now loaded via PHP, no JavaScript call needed
 			
 					var handle_description = (data) => {
 						var desc_to_change = document.getElementById("woocommerce_paymento_gateway_confirmation_description");

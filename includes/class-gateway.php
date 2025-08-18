@@ -125,7 +125,7 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 			register_rest_route('paymento', '/merchant', array(
 				'methods' => 'GET',
 				'callback' => array(__CLASS__, 'wk_get_merchant_callback'),
-				'permission_callback' => '__return_true',
+				'permission_callback' => array(__CLASS__, 'merchant_permission_check'),
 			));
 		register_rest_route('paymento', '/result', array(
 			'methods' => 'POST',
@@ -263,6 +263,14 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
     }
 
 	
+
+
+	public static function merchant_permission_check($request) {
+		// Allow the request if user is logged in and can manage options (admin)
+		// Or if it's coming from admin area with valid nonce
+		return current_user_can('manage_options') || current_user_can('manage_woocommerce');
+	}
+
 	public static function wk_get_health_callback ($request){
 		$args = array(
 			// Increase the timeout from the default of 5 to 10 seconds
@@ -292,11 +300,6 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 	}
 
 	public static function wk_get_merchant_callback($request) {
-		// Check permissions
-		if (!current_user_can('manage_woocommerce')) {
-			return new WP_REST_Response(array('error' => 'Insufficient permissions'), 403);
-		}
-
 		// Retrieve the API key from headers
 		$api_key = $request->get_header('Api-Key');
 	
@@ -445,10 +448,93 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 	}
 
 	/**
+	 * Get merchant information from API
+	 */
+	private function get_merchant_info() {
+		$api_key = $this->get_option('api_key');
+		
+		if (empty($api_key)) {
+			return array(
+				'status' => 'error',
+				'message' => 'API Key not configured'
+			);
+		}
+
+		$args = array(
+			'headers' => array(
+				'Content-Type' => 'application/json',
+				'Api-Key' => $api_key,
+			),
+			'timeout' => 10,
+			'sslverify' => false,
+		);
+
+		$response = wp_remote_get('https://api.paymento.io/v1/ping/merchant/', $args);
+
+		if (is_wp_error($response)) {
+			return array(
+				'status' => 'error',
+				'message' => 'Connection failed: ' . $response->get_error_message()
+			);
+		}
+
+		$body = wp_remote_retrieve_body($response);
+		$result = json_decode($body, true);
+
+		if ($result && isset($result['success']) && $result['success']) {
+			// Update IPN settings while we're at it
+			$this->update_ipn_settings($api_key);
+			
+			return array(
+				'status' => 'success',
+				'data' => $result['body']
+			);
+		}
+
+		return array(
+			'status' => 'error',
+			'message' => 'Invalid API response'
+		);
+	}
+
+	/**
+	 * Update IPN settings
+	 */
+	private function update_ipn_settings($api_key) {
+		$body_settings = array(
+			"IPN_Url" => get_site_url() . "/wp-json/paymento/result",
+			"IPN_Method" => 1
+		);
+
+		$setting_args = array(
+			'headers' => array(
+				'Content-Type' => 'application/json',
+				'Api-Key' => $api_key,
+			),
+			'body' => json_encode($body_settings),
+			'timeout' => 10,
+			'sslverify' => false,
+		);
+
+		wp_remote_post('https://api.paymento.io/v1/payment/settings/', $setting_args);
+	}
+
+	/**
 	 * Initialise Gateway Settings Form Fields.
 	 */
 	public function init_form_fields()
 	{
+		// Get merchant info in PHP
+		$merchant_info = $this->get_merchant_info();
+		
+		if ($merchant_info['status'] === 'success') {
+			$merchant_name = $merchant_info['data']['name'];
+			$merchant_status = $merchant_info['data']['isActive'] ? 'Active' : 'Not Active';
+			$merchant_display = '<span style="padding:5px 10px; background-color:#83f28f;border-radius:5px;">' . esc_html($merchant_name) . ' (' . esc_html($merchant_status) . ')</span>';
+		} else {
+			$merchant_display = '<span style="padding:5px 10px; background-color:#f52f57; color:#fff;border-radius:5px;">Error: ' . esc_html($merchant_info['message']) . '</span>';
+		}
+
 		$this->form_fields = array(
 			'enabled' => array(
 				'title' => __('Enable/Disable', 'paymento-crypto-gateway'),
@@ -464,7 +550,7 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 		'Merchant' => array(
 			'title'   => 'Merchant Name',
 			'type' => 'title',
-			'description' => sprintf('<span id="paymento_merchant_name">Loading</span>'),
+			'description' => $merchant_display,
 		),
 			'title' => array(
 				'title' => __('Title', 'paymento-crypto-gateway'),
