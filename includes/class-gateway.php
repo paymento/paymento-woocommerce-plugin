@@ -22,6 +22,15 @@ if ( ! class_exists( 'WC_Payment_Gateway' ) ) {
  */
 class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 
+	/**
+	 * Option key holding the result of the last merchant/IPN sync.
+	 *
+	 * The sync only runs when an administrator saves the gateway settings, so the
+	 * settings screen renders from this stored snapshot instead of calling the API
+	 * on every page load.
+	 */
+	const CONNECTION_STATUS_OPTION = 'paymento_connection_status';
+
 	private $api_key;
 	private $secret_key;
 	private $confirmation;
@@ -36,6 +45,22 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 	 */
 	public static function load() {
 		add_action( 'rest_api_init', array( __CLASS__, 'wk_register_custom_routes' ) );
+	}
+
+	/**
+	 * Return the gateway instance WooCommerce already built, rather than
+	 * constructing a second one.
+	 *
+	 * @return WC_PAYMENTO_Gateway
+	 */
+	public static function get_instance() {
+		if ( function_exists( 'WC' ) && WC()->payment_gateways() ) {
+			$gateways = WC()->payment_gateways()->payment_gateways();
+			if ( isset( $gateways['paymento_gateway'] ) ) {
+				return $gateways['paymento_gateway'];
+			}
+		}
+		return new self();
 	}
 
 
@@ -79,7 +104,6 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 		add_filter( 'woocommerce_available_payment_gateways', array($this, 'filter_woocommerce_available_payment_gateways'), 10, 1 ); 
 
 		add_action('wp_enqueue_scripts', array($this,'register_script'));
-		add_action('paymento_result_action', array($this,'paymento_result_action_callback'), 20, 2);
 		// add_action( 'init', array($this,'register_shipped_order_status') );
 		// add_filter( 'wc_order_statuses', array($this,'custom_order_status'));
 
@@ -98,35 +122,26 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 
 	function paymento_admin_enqueue($hook) {
 		if ($hook !== 'woocommerce_page_wc-settings') return;
-	
+
+		// Only the gateway's own settings panel needs this script.
+		$section = isset($_GET['section']) ? sanitize_key(wp_unslash($_GET['section'])) : '';
+		if ($section !== $this->id) return;
+
 		wp_enqueue_script(
 			'paymento-admin-js',
 			PAYMENTOGW_URL . 'assets/js/paymento.js',
 			array('jquery'),
-			'1.1.7',
+			'1.2.2',
 			true
 		);
-	
-		// Ensure 'paymento_vars' is passed properly
-		wp_localize_script('paymento-admin-js', 'paymento_vars', array(
-			'api_key'  => esc_attr($this->get_option('api_key')),
-			'rest_url' => esc_url(get_rest_url()),
-		));
-	}	
-	
+	}
+
 
 	public static	function wk_register_custom_routes() {
 
-		register_rest_route( 'paymento', '/health', array(
-			'methods' => 'GET',
-			'callback' => array(__CLASS__,'wk_get_health_callback') ,
-			'permission_callback' => '__return_true'
-			));
-			register_rest_route('paymento', '/merchant', array(
-				'methods' => 'GET',
-				'callback' => array(__CLASS__, 'wk_get_merchant_callback'),
-				'permission_callback' => array(__CLASS__, 'merchant_permission_check'),
-			));
+		// Only the IPN endpoint is exposed. The health/merchant proxies were removed:
+		// they let any visitor trigger outbound calls to the Paymento API, and the
+		// merchant route also re-wrote the IPN settings on every hit.
 		register_rest_route('paymento', '/result', array(
 			'methods' => 'POST',
 			'callback' => array(__CLASS__, 'wk_get_post_callback'),
@@ -136,7 +151,7 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 	}
 
 	public static function wk_get_post_callback($request) {
-        $gateway = new self();
+        $gateway = self::get_instance();
         $headers = $request->get_headers();
         $body = $request->get_body();
         $params = $request->get_json_params();
@@ -265,176 +280,6 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 	
 
 
-	public static function merchant_permission_check($request) {
-		// Allow the request if user is logged in and can manage options (admin)
-		// Or if it's coming from admin area with valid nonce
-		return current_user_can('manage_options') || current_user_can('manage_woocommerce');
-	}
-
-	public static function wk_get_health_callback ($request){
-		$args = array(
-			// Increase the timeout from the default of 5 to 10 seconds
-			'timeout'    => 10,
-		
-			// Overwrite the default: "WordPress/5.8;www.mysite.tld" header:
-			'user-agent' => 'My special WordPress installation',
-		
-			// Add a couple of custom HTTP headers
-			'headers'    => array(
-				 'X-Custom-Id' => 'ABC123',
-				 'X-Secret-Thing' => 'secret',
-			),
-		
-			// Skip validating the HTTP servers SSL cert;
-			'sslverify' => false,
-		);
-		
-		$response = wp_remote_get('https://api.paymento.io/v1/ping/', $args);
-
-		if (is_wp_error($response)) {
-			return new WP_REST_Response(array('error' => $response->get_error_message()), 500);
-		}
-
-		$body = wp_remote_retrieve_body($response);
-		return new WP_REST_Response(json_decode($body, true));
-	}
-
-	public static function wk_get_merchant_callback($request) {
-		// Retrieve the API key from headers
-		$api_key = $request->get_header('Api-Key');
-	
-		// Check if API key is provided
-		if (empty($api_key)) {
-			return new WP_REST_Response(array('error' => 'Missing API key'), 401);
-		}
-	
-		// Sanitize the API key
-		$api_key = sanitize_text_field($api_key);
-	
-		// Make the external API request
-		$args = array(
-			'headers' => array(
-				'Content-Type' => 'application/json',
-				'Api-Key' => $api_key,
-			),
-			'sslverify' => false,
-		);
-	
-		$response = wp_remote_get('https://api.paymento.io/v1/ping/merchant/', $args);
-	
-		// Check for errors in the external API request
-		if (is_wp_error($response)) {
-			return new WP_REST_Response(array('error' => 'External API request failed'), 500);
-		}
-	
-		// Decode the response body
-		$body = json_decode($response['body'], true);
-	
-		// Update IPN settings (if needed)
-		$body_settings = array(
-			"IPN_Url" => get_site_url() . "/wp-json/paymento/result",
-			"IPN_Method" => 1
-		);
-	
-		$setting_args = array(
-			'headers' => array(
-				'Content-Type' => 'application/json',
-				'Api-Key' => $api_key,
-			),
-			'body' => json_encode($body_settings),
-			'sslverify' => false,
-		);
-	
-		$settings_response = wp_remote_post('https://api.paymento.io/v1/payment/settings/', $setting_args);
-	
-		// Return the merchant API response
-		return new WP_REST_Response($body);
-	}
-	
-
-	public function paymento_result_action_callback($result, $headers) {
-		if ( isset($result['OrderId']) ) {
-			$order_id = absint( $result['OrderId'] );
-		}
-		if ( isset($order_id) && !empty($order_id) ) {
-			$order = wc_get_order($order_id);
-			if ($order->get_status() !== 'completed') {
-
-				// Get data from bank
-				$OrderId = isset($result['OrderId']) ? $result['OrderId'] : '';
-				$OrderStatus = isset($result['OrderStatus']) ? $result['OrderStatus'] : '';
-				
-				if( $OrderStatus == 7 ) {
-					// BOOM! Payment completed!
-					// $this->update_option( 'debug', '7' . json_encode($result));
-
-					$order = wc_get_order($order_id);
-					$payment_token = $order->get_meta('paymento-payment-token');
-
-					$payload = array(
-						'token' => $payment_token,
-					);
-					
-					$args = array(
-						'body' => json_encode($payload),
-						'headers' => array(
-							'Content-Type' => 'application/json',
-							'Api-Key' => $this->get_option('api_key')
-						),
-						'timeout' => 30
-					);
-					
-					$response = wp_remote_post('https://api.paymento.io/v1/payment/verify', $args);
-					
-					if (is_wp_error($response)) {
-						// Translators: %1$s is the error message.
-						$message = sprintf(__('Payment Verification failed: %1$s', 'paymento-crypto-gateway'), $response->get_error_message());
-						$order->add_order_note($message, 1);
-						wc_add_notice(__('Payment error:', 'paymento-crypto-gateway') . $message, 'error');
-						wp_redirect(wc_get_checkout_url(), 301);
-						return new WP_REST_Response('error');
-					}
-					
-					$body = wp_remote_retrieve_body($response);
-					$result = json_decode($body, true);
-					
-					if($result["success"] && $result["body"]["token"] == $payment_token){
-						// $this->update_option( 'debug', 'verify result: true' . $order_id);
-						wc_reduce_stock_levels($order_id);
-						// Translators: %1$s is a line break, %2$s is the payment token.
-						$message = sprintf(__('call: Payment was successful %1$s token: %2$s', 'paymento-crypto-gateway'),'<br />', $payment_token);
-						$order->add_order_note($message, 1);
-						$order->add_payment_token($payment_token);
-						$order->update_status( 'processing' );
-
-						$order->payment_complete();
-						return new WP_REST_Response('good');
- 
-						// $successful_page = add_query_arg( 'wc_status', 'success', $this->get_return_url( $order ) );
-						// wp_redirect( $successful_page );
-						// exit();
-						
-					}else{			
-						$message = sprintf(
-							__('Payment Verification was unsuccessful.', 'paymento-crypto-gateway'),
-							'<br />',
-							$payment_token
-						);
-						$order->add_order_note($message, 1);
-						wc_add_notice( __('Payment error:', 'paymento-crypto-gateway') . $message, 'error' );
-						wp_redirect(wc_get_checkout_url(), 301);
-						return new WP_REST_Response('good');
-					}
-				} else {
-					// OOPS! Something wrong
-					$error_message =  "Paymento failed payment";
-					wc_add_notice( __('Payment error:', 'paymento-crypto-gateway') . $error_message, 'error' );
-					wp_redirect( wc_get_checkout_url() );
-					return new WP_REST_Response('good');
-				}
-			}
-		}
-	}
 
 	public function register_script() {
 		wp_register_style(
@@ -448,16 +293,35 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 	}
 
 	/**
-	 * Get merchant information from API
+	 * Save the gateway settings, then re-check the merchant and re-register the
+	 * IPN URL with Paymento.
+	 *
+	 * This is the only place that talks to /v1/ping/merchant/ and
+	 * /v1/payment/settings/. Both used to run from the constructor, which meant
+	 * every front-end page view, AJAX call and cron tick hit the Paymento API.
 	 */
-	private function get_merchant_info() {
+	public function process_admin_options() {
+		$saved = parent::process_admin_options();
+
+		// Re-read the freshly saved values before syncing.
+		$this->init_settings();
+		$this->sync_with_paymento();
+
+		return $saved;
+	}
+
+	/**
+	 * Verify the API key and push the current IPN URL to Paymento.
+	 *
+	 * Runs only on an administrator-initiated settings save. The outcome is
+	 * stored so the settings screen can render it without another API call.
+	 */
+	private function sync_with_paymento() {
 		$api_key = $this->get_option('api_key');
-		
-		if (empty($api_key)) {
-			return array(
-				'status' => 'error',
-				'message' => 'API Key not configured'
-			);
+
+		if ( empty($api_key) ) {
+			$this->store_connection_status('error', __('API Key not configured', 'paymento-crypto-gateway'));
+			return;
 		}
 
 		$args = array(
@@ -466,39 +330,37 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 				'Api-Key' => $api_key,
 			),
 			'timeout' => 10,
-			'sslverify' => false,
 		);
 
 		$response = wp_remote_get('https://api.paymento.io/v1/ping/merchant/', $args);
 
-		if (is_wp_error($response)) {
-			return array(
-				'status' => 'error',
-				'message' => 'Connection failed: ' . $response->get_error_message()
-			);
+		if ( is_wp_error($response) ) {
+			$this->log('Merchant check failed: ' . $response->get_error_message());
+			// Translators: %s is the connection error message.
+			$this->store_connection_status('error', sprintf(__('Connection failed: %s', 'paymento-crypto-gateway'), $response->get_error_message()));
+			return;
 		}
 
-		$body = wp_remote_retrieve_body($response);
-		$result = json_decode($body, true);
+		$result = json_decode(wp_remote_retrieve_body($response), true);
 
-		if ($result && isset($result['success']) && $result['success']) {
-			// Update IPN settings while we're at it
-			$this->update_ipn_settings($api_key);
-			
-			return array(
-				'status' => 'success',
-				'data' => $result['body']
-			);
+		if ( ! $result || empty($result['success']) || ! isset($result['body']) ) {
+			$this->log('Merchant check returned an unexpected response');
+			$this->store_connection_status('error', __('Invalid API response — please check your API Key', 'paymento-crypto-gateway'));
+			return;
 		}
 
-		return array(
-			'status' => 'error',
-			'message' => 'Invalid API response'
-		);
+		$this->store_connection_status('success', '', array(
+			'name'     => isset($result['body']['name']) ? $result['body']['name'] : '',
+			'isActive' => ! empty($result['body']['isActive']),
+		));
+
+		$this->update_ipn_settings($api_key);
 	}
 
 	/**
-	 * Update IPN settings
+	 * Register this store's IPN URL with Paymento.
+	 *
+	 * Called from sync_with_paymento() only, i.e. on an admin settings save.
 	 */
 	private function update_ipn_settings($api_key) {
 		$body_settings = array(
@@ -511,29 +373,75 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 				'Content-Type' => 'application/json',
 				'Api-Key' => $api_key,
 			),
-			'body' => json_encode($body_settings),
+			'body' => wp_json_encode($body_settings),
 			'timeout' => 10,
-			'sslverify' => false,
 		);
 
-		wp_remote_post('https://api.paymento.io/v1/payment/settings/', $setting_args);
+		$response = wp_remote_post('https://api.paymento.io/v1/payment/settings/', $setting_args);
+
+		if ( is_wp_error($response) ) {
+			$this->log('IPN registration failed: ' . $response->get_error_message());
+			return;
+		}
+
+		$this->log('IPN URL registered: ' . $body_settings['IPN_Url']);
+	}
+
+	/**
+	 * Persist the outcome of the last sync so the settings screen can show it.
+	 */
+	private function store_connection_status($status, $message = '', $merchant = array()) {
+		update_option(self::CONNECTION_STATUS_OPTION, array(
+			'status'      => $status,
+			'message'     => $message,
+			'merchant'    => $merchant,
+			'checked_at'  => time(),
+		), false);
+	}
+
+	/**
+	 * Render the stored connection status. Never makes an API call.
+	 */
+	private function get_connection_status_html() {
+		$stored = get_option(self::CONNECTION_STATUS_OPTION);
+
+		if ( ! is_array($stored) || empty($stored['status']) ) {
+			return '<span style="padding:5px 10px; background-color:#e0e0e0;border-radius:5px;">'
+				. esc_html__('Not checked yet — save your settings to connect.', 'paymento-crypto-gateway')
+				. '</span>';
+		}
+
+		$checked_at = '';
+		if ( ! empty($stored['checked_at']) ) {
+			$formatted = wp_date( get_option('date_format') . ' ' . get_option('time_format'), $stored['checked_at'] );
+			// Translators: %s is a human-readable date and time.
+			$checked_at = '<br /><small>' . esc_html( sprintf( __('Last checked: %s', 'paymento-crypto-gateway'), $formatted ) ) . '</small>';
+		}
+
+		if ( $stored['status'] !== 'success' ) {
+			return '<span style="padding:5px 10px; background-color:#f52f57; color:#fff;border-radius:5px;">'
+				. esc_html__('Error:', 'paymento-crypto-gateway') . ' ' . esc_html($stored['message'])
+				. '</span>' . $checked_at;
+		}
+
+		$name  = isset($stored['merchant']['name']) ? $stored['merchant']['name'] : '';
+		$state = ! empty($stored['merchant']['isActive'])
+			? __('Active', 'paymento-crypto-gateway')
+			: __('Not Active', 'paymento-crypto-gateway');
+
+		return '<span style="padding:5px 10px; background-color:#83f28f;border-radius:5px;">'
+			. esc_html($name) . ' (' . esc_html($state) . ')</span>' . $checked_at;
 	}
 
 	/**
 	 * Initialise Gateway Settings Form Fields.
+	 *
+	 * Must stay free of network calls: WooCommerce instantiates every gateway on
+	 * practically every request that loads WooCommerce.
 	 */
 	public function init_form_fields()
 	{
-		// Get merchant info in PHP
-		$merchant_info = $this->get_merchant_info();
-		
-		if ($merchant_info['status'] === 'success') {
-			$merchant_name = $merchant_info['data']['name'];
-			$merchant_status = $merchant_info['data']['isActive'] ? 'Active' : 'Not Active';
-			$merchant_display = '<span style="padding:5px 10px; background-color:#83f28f;border-radius:5px;">' . esc_html($merchant_name) . ' (' . esc_html($merchant_status) . ')</span>';
-		} else {
-			$merchant_display = '<span style="padding:5px 10px; background-color:#f52f57; color:#fff;border-radius:5px;">Error: ' . esc_html($merchant_info['message']) . '</span>';
-		}
+		$merchant_display = $this->get_connection_status_html();
 
 		$this->form_fields = array(
 			'enabled' => array(
@@ -542,16 +450,11 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 				'label' => __('Enable Paymento Payments', 'paymento-crypto-gateway'),
 				'default' => 'yes',
 			),
-			'status' => array(
-				'title'   => 'Ping Status',
+			'Merchant' => array(
+				'title'   => __('Connection Status', 'paymento-crypto-gateway'),
 				'type' => 'title',
-				'description' => sprintf('<span id="paymento_helth_check">Loading</span>'),
-		),
-		'Merchant' => array(
-			'title'   => 'Merchant Name',
-			'type' => 'title',
-			'description' => $merchant_display,
-		),
+				'description' => $merchant_display,
+			),
 			'title' => array(
 				'title' => __('Title', 'paymento-crypto-gateway'),
 				'type' => 'text',
