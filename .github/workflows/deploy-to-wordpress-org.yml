@@ -90,6 +90,12 @@ jobs:
           # The WordPress.org slug differs from this repository's name, so it
           # must be set explicitly -- the default would target the wrong plugin.
           SLUG: paymento-crypto-gateway
+          # Without this the action derives the SVN tag from GITHUB_REF. That is
+          # correct for a tag push, but a manual run is on a branch, so it would
+          # try to create tags/refs/heads/main. The verify job has already
+          # confirmed this value matches the tag, the Version header and the
+          # readme Stable tag.
+          VERSION: ${{ needs.verify.outputs.version }}
 
       - name: Attach the built zip to the workflow run
         uses: actions/upload-artifact@v4
