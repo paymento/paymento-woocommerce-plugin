@@ -1,0 +1,99 @@
+name: Deploy to WordPress.org
+
+# Releases are cut by pushing a version tag, e.g.:
+#   git tag 1.3.0 && git push origin 1.3.0
+#
+# The SVN tag takes the same name as the git tag, and it must match the
+# "Stable tag" in readme.txt or the plugin directory will keep serving the
+# previous release. The tag filter below enforces the bare "1.3.0" form --
+# a "v1.3.0" tag would produce an SVN tag that never matches.
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run: validate and build without committing to SVN'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify release metadata
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check version numbers agree
+        id: check
+        run: |
+          set -euo pipefail
+
+          header=$(sed -n 's/^[[:space:]]*Version:[[:space:]]*\([0-9][0-9.]*\).*/\1/p' paymento-crypto-gateway.php | head -1)
+          stable=$(sed -n 's/^Stable tag:[[:space:]]*\([0-9][0-9.]*\).*/\1/p' readme.txt | head -1)
+
+          if [ "${{ github.event_name }}" = "push" ]; then
+            target="${GITHUB_REF_NAME}"
+          else
+            target="$header"
+          fi
+
+          echo "git tag / target : $target"
+          echo "plugin header    : $header"
+          echo "readme stable tag: $stable"
+
+          echo "version=$target" >> "$GITHUB_OUTPUT"
+
+          fail=0
+          if [ "$header" != "$target" ]; then
+            echo "::error file=paymento-crypto-gateway.php::Version header is $header but the release is $target"
+            fail=1
+          fi
+          if [ "$stable" != "$target" ]; then
+            echo "::error file=readme.txt::Stable tag is $stable but the release is $target"
+            fail=1
+          fi
+
+          # A release with no changelog entry ships to users with no explanation
+          # of what changed, and cannot be corrected without a new version.
+          if ! grep -qE "^= ${target//./\\.} " readme.txt; then
+            echo "::error file=readme.txt::No changelog entry found for $target"
+            fail=1
+          fi
+
+          exit $fail
+
+  deploy:
+    name: Deploy to WordPress.org
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy
+        id: deploy
+        uses: 10up/action-wordpress-plugin-deploy@2.3.0
+        with:
+          # A manual run never commits unless the dry-run box is unticked.
+          dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+          generate-zip: true
+        env:
+          SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
+          SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
+          # The WordPress.org slug differs from this repository's name, so it
+          # must be set explicitly -- the default would target the wrong plugin.
+          SLUG: paymento-crypto-gateway
+
+      - name: Attach the built zip to the workflow run
+        uses: actions/upload-artifact@v4
+        with:
+          name: paymento-crypto-gateway-${{ needs.verify.outputs.version }}
+          path: ${{ steps.deploy.outputs.zip-path }}
+          if-no-files-found: warn

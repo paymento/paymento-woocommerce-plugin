@@ -2,10 +2,16 @@
 # Used by `wp dist-archive`. Keep in sync with the build step if you zip manually.
 
 .git
+.github
 .gitignore
 .gitattributes
 .distignore
 .DS_Store
+
+# Plugin-directory banner/icon/screenshot images, if ever added. These belong
+# in the SVN root assets/ directory, never inside the plugin download.
+.wordpress-org
+
 .idea
 .vscode
 node_modules
