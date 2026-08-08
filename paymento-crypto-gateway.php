@@ -3,7 +3,7 @@
    Plugin name: Paymento – Non-Custodial Crypto Payment Gateway for WooCommerce  
    Plugin URI: https://github.com/paymento/paymento-woocommerce-plugin
    Description: Accept Bitcoin, Ethereum, USDT, and more directly into your wallet with Paymento! A secure, non-custodial crypto payment gateway for WooCommerce—no intermediaries, no hidden fees. 
-   Version: 1.2.1
+   Version: 1.3.0
    Author: Paymento.io
    Author URI: https://paymento.io
    Text Domain: paymento-crypto-gateway
@@ -11,10 +11,10 @@
    License: GPL-2.0-or-later
    License URI: https://www.gnu.org/licenses/gpl-2.0.html
    Requires at least: 6.0
-   Tested up to: 6.4
+   Tested up to: 7.0
    Requires PHP: 8.0
    WC requires at least: 8.0
-   WC tested up to: 8.4
+   WC tested up to: 10.0
    Requires Plugins: woocommerce
 */
 
@@ -22,7 +22,7 @@
  * Main PAYMENTO Gateway Class.
  *
  * @class PAYMENTO_WC_Main
- * @version	1.2.1
+ * @version	1.3.0
  */
 
  if ( ! defined( 'ABSPATH' ) ) {

@@ -131,7 +131,7 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 			'paymento-admin-js',
 			PAYMENTOGW_URL . 'assets/js/paymento.js',
 			array('jquery'),
-			'1.2.2',
+			'1.3.0',
 			true
 		);
 	}

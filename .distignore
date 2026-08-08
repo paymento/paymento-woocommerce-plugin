@@ -1,0 +1,22 @@
+# Files and directories excluded from the distributed plugin zip.
+# Used by `wp dist-archive`. Keep in sync with the build step if you zip manually.
+
+.git
+.gitignore
+.gitattributes
+.distignore
+.DS_Store
+.idea
+.vscode
+node_modules
+package.json
+package-lock.json
+composer.json
+composer.lock
+phpcs.xml
+phpcs.xml.dist
+README.md
+*.zip
+*.log
+tests
+bin

@@ -1,0 +1,7 @@
+.DS_Store
+node_modules/
+*.log
+
+# Build output — the release zip is attached to the GitHub release,
+# not committed to the repository.
+paymento-crypto-gateway.zip

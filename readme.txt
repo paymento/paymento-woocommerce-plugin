@@ -1,12 +1,12 @@
 === Paymento – Non-Custodial Crypto Payment Gateway for WooCommerce ===  
 Contributors: paymento  
-Tags: crypto payments, Bitcoin, Ethereum, payment gateway, crypto gateway, woocommerce, non-custodial, USDT
-Requires at least: 6.0  
-Tested up to: 6.8
+Tags: crypto payments, bitcoin, ethereum, payment gateway, non-custodial
+Requires at least: 6.0
+Tested up to: 7.0
 Requires PHP: 8.0
 WC requires at least: 8.0
-WC tested up to: 8.4  
-Stable tag: 1.2.1  
+WC tested up to: 10.0
+Stable tag: 1.3.0
 License: GPL-2.0-or-later  
 License URI: https://www.gnu.org/licenses/gpl-2.0.html  
 Text Domain: paymento-crypto-gateway
@@ -39,11 +39,20 @@ Paymento allows businesses and individuals to accept cryptocurrency payments **d
 
 == Installation ==
 
-1. Download the plugin zip file from the GitHub repository.
-2. Log in to your WordPress admin panel and navigate to Plugins > Add New.
-3. Click on the "Upload Plugin" button at the top of the page.
-4. Choose the downloaded zip file and click "Install Now".
-5. After installation, click "Activate Plugin".
+**From your WordPress dashboard**
+
+1. Go to Plugins > Add New.
+2. Search for "Paymento".
+3. Click "Install Now", then "Activate".
+
+**Manual installation**
+
+1. Download the plugin zip file.
+2. Go to Plugins > Add New and click "Upload Plugin".
+3. Choose the zip file and click "Install Now".
+4. Click "Activate Plugin".
+
+WooCommerce must be installed and active before activating this plugin. After activating, follow the Configuration steps below.
 
 == Configuration ==
 
@@ -78,26 +87,37 @@ Once configured, the Paymento payment option will appear on your WooCommerce che
 This plugin connects to the **Paymento API** to process cryptocurrency payments. Paymento is a non-custodial payment gateway that enables WooCommerce stores to accept payments in Bitcoin, Ethereum, USDT, and other cryptocurrencies.
 
 ### 📌 **Data Sent to Paymento API**
-The plugin interacts with the Paymento API for the following purposes:
+The plugin makes exactly four types of request to the Paymento API, each with a specific trigger. No request is made on ordinary page views.
 
-- **Payment Verification**  
-  - The plugin sends payment transaction details to `https://api.paymento.io/v1/payment/verify` to confirm if a payment was successfully made.  
-  - This request is triggered when an order is placed or needs verification.  
+- **Submitting Payment Requests**
+  - Endpoint: `https://api.paymento.io/v1/payment/request`
+  - Triggered when a customer places an order and chooses Paymento at checkout.
+  - Data sent: order total, currency, order ID, the return URL on your store, and your API Key.
+  - Paymento returns a payment token used to generate the invoice.
 
-- **Fetching Merchant Information**  
-  - Calls `https://api.paymento.io/v1/ping/merchant/` to retrieve the store’s registered name and confirm API connectivity.  
-  - This request is made when setting up the payment gateway in WooCommerce.  
+- **Payment Verification**
+  - Endpoint: `https://api.paymento.io/v1/payment/verify`
+  - Triggered only when Paymento notifies your store of a paid order via webhook (IPN).
+  - Data sent: the payment token for that order, and your API Key.
+  - Used to confirm the notification is genuine before the order is completed.
 
-- **Setting Callback URLs**  
-  - The plugin sends data to `https://api.paymento.io/v1/payment/settings/` to configure callback URLs for payment notifications.  
-  - This happens when the payment gateway is set up for the first time.  
+- **Fetching Merchant Information**
+  - Endpoint: `https://api.paymento.io/v1/ping/merchant/`
+  - Triggered only when an administrator saves the gateway settings in WooCommerce.
+  - Data sent: your API Key. Returns your registered merchant name and account status, which are stored locally and shown on the settings screen.
 
-- **Submitting Payment Requests**  
-  - When a customer selects crypto payment, the plugin sends a request to `https://api.paymento.io/v1/payment/request` with order details.  
-  - This allows Paymento to generate a payment invoice for the user.  
+- **Setting Callback URLs**
+  - Endpoint: `https://api.paymento.io/v1/payment/settings/`
+  - Triggered only when an administrator saves the gateway settings, after the merchant check above succeeds.
+  - Data sent: your store's webhook (IPN) URL and your API Key, so Paymento knows where to send payment notifications.
 
-- **API Health Check**  
-  - A request to `https://api.paymento.io/v1/ping/` ensures the API is operational before processing payments.  
+### 📌 **Customer Redirect**
+
+After an order is placed, the customer's browser is redirected to `https://app.paymento.io/gateway` with the payment token for that order, where they complete the payment. No other customer data is included in the redirect.
+
+### 📌 **Data Received**
+
+Paymento sends payment status notifications to `/wp-json/paymento/result` on your store. Every notification is verified with an HMAC SHA256 signature using your Secret Key before it is processed.
 
 
 ### 🔗 **Third-Party Policies**
@@ -146,6 +166,27 @@ For support, please open an issue on the GitHub repository or contact Paymento s
 Contributions to improve the plugin are welcome. Please fork the repository and submit a pull request with your changes.
 
 == Changelog ==
+
+= 1.3.0 - 2026-08-08 =
+**⚡ Performance & Security Update**
+
+**⚡ Performance:**
+* ✅ **Drastically fewer API requests** - The plugin previously contacted the Paymento API twice on nearly every request to your site, including ordinary front-end page views, AJAX calls and scheduled tasks. Each API call now has a single, deliberate trigger.
+* ✅ **Faster page loads** - Removing those blocking requests from the gateway's startup path speeds up front-end pages, the cart and checkout.
+* ✅ **Merchant status is cached** - Your merchant name and account status are checked when you save the gateway settings and stored locally, along with the time of the last check.
+
+**🛡️ Security:**
+* ✅ **Removed an unauthenticated endpoint** - `/wp-json/paymento/health` was publicly accessible and allowed any visitor to make your store contact the Paymento API. It has been removed.
+* ✅ **Removed a redundant endpoint** - `/wp-json/paymento/merchant` rewrote your webhook settings on every request and is no longer registered.
+* ✅ **TLS certificate validation enabled** - API requests no longer skip certificate checks, so your API Key is never sent over an unverified connection.
+
+**🔧 Technical Improvements:**
+* Payment verification now runs only in response to a webhook notification, from a single code path
+* The webhook handler reuses the existing gateway instance instead of creating a new one
+* Admin script loads only on the Paymento settings screen
+* Removed unused legacy code
+
+**⚠️ Note for developers:** If you were calling `/wp-json/paymento/health` or `/wp-json/paymento/merchant`, those routes no longer exist. The webhook endpoint `/wp-json/paymento/result` is unchanged.
 
 = 1.2.1 - 2025-01-17 =
 **🔧 Bug Fixes & Improvements**
@@ -221,6 +262,9 @@ Contributions to improve the plugin are welcome. Please fork the repository and 
 * No private key requirements
 
 == Upgrade Notice ==
+
+= 1.3.0 =
+⚡ **Important update for all users.** Removes a large volume of unnecessary requests to the Paymento API that could slow your store and cause rate limiting, and closes a publicly accessible endpoint. After updating, open WooCommerce > Settings > Payments > Paymento and click "Save changes" once to re-confirm your connection.
 
 = 1.2.1 =
 🔧 **Bug Fix Update!** Fixes merchant name display issues in admin settings. Now uses reliable server-side authentication instead of JavaScript. Recommended update for better admin experience.
