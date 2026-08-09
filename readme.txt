@@ -6,7 +6,7 @@ Tested up to: 7.0
 Requires PHP: 8.0
 WC requires at least: 8.0
 WC tested up to: 11.0
-Stable tag: 1.3.0
+Stable tag: 1.3.1
 License: GPL-2.0-or-later  
 License URI: https://www.gnu.org/licenses/gpl-2.0.html  
 Text Domain: paymento-crypto-gateway
@@ -167,6 +167,17 @@ Contributions to improve the plugin are welcome. Please fork the repository and 
 
 == Changelog ==
 
+= 1.3.1 - 2026-08-09 =
+**🛡️ Security Release — update immediately**
+
+**🛡️ Fixed:**
+* ✅ **Orders could be marked paid without payment** - The URL customers return to after paying accepted a payment status as a query parameter and trusted it. Anyone who knew the address of a store using this plugin could complete their own unpaid order. The return URL is now only a redirect: it reads the order's existing status and never changes it.
+* ✅ **Return URL restricted to Paymento orders** - The endpoint did not check which gateway an order was placed with, so it could be aimed at orders paid by other methods. It now rejects any order not placed through Paymento.
+
+Orders are now completed solely by Paymento's payment notification (IPN), which is verified with an HMAC SHA256 signature and confirmed against the Paymento API before an order changes state. That check was already in place and was not affected.
+
+**What this means for you:** if your store has been live with an earlier version, review recent orders that were marked paid but have no matching payment in your Paymento dashboard, particularly any order completed without a corresponding transaction.
+
 = 1.3.0 - 2026-08-08 =
 **⚡ Performance & Security Update**
 
@@ -262,6 +273,9 @@ Contributions to improve the plugin are welcome. Please fork the repository and 
 * No private key requirements
 
 == Upgrade Notice ==
+
+= 1.3.1 =
+🛡️ **Security release — update immediately.** Fixes a flaw that allowed an order to be marked paid without any payment being made. Orders are now completed only by Paymento's signature-verified payment notification. After updating, review any recent orders marked paid that have no matching transaction in your Paymento dashboard.
 
 = 1.3.0 =
 ⚡ **Important update for all users.** Removes a large volume of unnecessary requests to the Paymento API that could slow your store and cause rate limiting, and closes a publicly accessible endpoint. After updating, open WooCommerce > Settings > Payments > Paymento and click "Save changes" once to re-confirm your connection.

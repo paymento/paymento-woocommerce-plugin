@@ -604,77 +604,76 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 		$this->get_payment_token($order_id);
 	}
 
+	/**
+	 * Send the customer back to the right page after they return from Paymento.
+	 *
+	 * This endpoint is a public URL that anyone can request with any query
+	 * string, so it deliberately makes no decision of its own about whether an
+	 * order was paid: it reads the order's current status and redirects. The
+	 * only thing that may complete an order is the IPN webhook at
+	 * /wp-json/paymento/result, whose payload is HMAC verified and whose
+	 * payment token is confirmed against the Paymento API.
+	 *
+	 * Before 1.3.1 this method completed orders based on a `status` value taken
+	 * straight from the request, which let anyone mark an order paid without
+	 * paying.
+	 */
 	public function return_from_bank() {
 
-		if ( isset($_GET['wc_order']) ) {
-			$order_id = absint( $_GET['wc_order'] );
-		} else {
-			wp_die( __('Invalid order ID', 'paymento-crypto-gateway') );
+		// No nonce: this is a public return URL reached by redirect from an
+		// external site. Nothing below trusts the request or changes any order.
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended
+		$order_id = isset($_GET['wc_order']) ? absint( wp_unslash($_GET['wc_order']) ) : 0;
+		$reported = isset($_REQUEST['status']) ? absint( wp_unslash($_REQUEST['status']) ) : 0;
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+
+		if ( ! $order_id ) {
+			wp_die( esc_html__('Invalid order ID', 'paymento-crypto-gateway') );
 		}
-		$confirmation_type = $this->get_option('confirmation');
 
-		if ( isset($order_id) && !empty($order_id) ) {
-			$order = wc_get_order($order_id);
-			if (!$order) {
-				wp_die( __('Order not found', 'paymento-crypto-gateway') );
-			}
-			
-			if ($order->get_status() !== 'completed' && $order->get_status() !== 'processing') {
+		$order = wc_get_order($order_id);
 
-				// Get data from Paymento
-				$OrderId = isset($_REQUEST['OrderId']) ? absint($_REQUEST['OrderId']) : 0;
-				$OrderStatus = isset($_REQUEST['status']) ? absint($_REQUEST['status']) : 0;
-				$payment_token = $order->get_meta('paymento-payment-token');
-
-				if( $OrderStatus == 7 && ( $confirmation_type == 1) ) {
-					// BOOM! Payment completed!
-						WC()->cart->empty_cart();
-						WC()->session->delete_session( 'paymento_order_id' );
-						// Translators: %1$s is the order ID, %2$s is the payment status.
-						$message = sprintf(__('Order ID: %1$s, Payment Status: %2$s', 'paymento-crypto-gateway'), $order_id, $payment_status);
-						$order->add_payment_token($payment_token);
-						$order->add_order_note($message, 1);
-						$order->payment_complete();
-						$successful_page = add_query_arg( 'wc_status', 'success', $this->get_return_url( $order ) );
-						wp_redirect( $successful_page );
-						exit();
-				}
-				elseif( $OrderStatus == 7 && $confirmation_type == 0 ) {
-					// BOOM! Payment completed!
-						WC()->cart->empty_cart();
-						WC()->session->delete_session( 'paymento_order_id' );
-						// Translators: %1$s is the payment token.
-						$message = sprintf(__('Payment token: %1$s', 'paymento-crypto-gateway'),$payment_token);
-						$order->add_payment_token($payment_token);
-						$order->add_order_note($message, 1);
-						$order->payment_complete();
-
-						$order->update_status( 'on-hold' );
-						$successful_page = add_query_arg( 'wc_status', 'success', $this->get_return_url( $order ) );
-						wp_redirect( $successful_page );
-						exit();
-				} elseif( $OrderStatus == 3 ) {
-					// BOOM! Payment completed!
-						$message = sprintf(
-							__('rfb: Payment Waiting To Confirm', 'paymento-crypto-gateway'));
-						$order->add_payment_token($payment_token);
-						$order->add_order_note($message, 1);
-						$successful_page = add_query_arg( 'wc_status', 'success', $this->get_return_url( $order ) );
-						wp_redirect( $successful_page );
-						exit();	
-				} else {
-					// OOPS! Something wrong
-					$error_message =  "rfb: Paymento failed payment";
-					wc_add_notice( __('Payment error:', 'paymento-crypto-gateway') . $error_message, 'error' );
-					wp_redirect( wc_get_checkout_url() ,301);
-					exit();
-				}
-			}else if($order->get_status() == 'completed' || $order->get_status() == 'processing'){
-				$successful_page = add_query_arg( 'wc_status', 'success', $this->get_return_url( $order ) );
-				wp_redirect( $successful_page );
-				exit();
-			}
+		// Treat an order placed through another gateway as not found, so this
+		// endpoint can never be pointed at unrelated orders.
+		if ( ! $order || $order->get_payment_method() !== $this->id ) {
+			wp_die( esc_html__('Order not found', 'paymento-crypto-gateway') );
 		}
+
+		$status = $order->get_status();
+		$this->log(sprintf(
+			'Customer returned for order %d. Order status: %s. Status reported in the URL (not trusted): %d',
+			$order_id,
+			$status,
+			$reported
+		));
+
+		if ( 'failed' === $status || 'cancelled' === $status ) {
+			wc_add_notice(
+				__('Payment error: the payment for this order did not complete. Please try again.', 'paymento-crypto-gateway'),
+				'error'
+			);
+			wp_safe_redirect( wc_get_checkout_url() );
+			exit;
+		}
+
+		// The checkout is finished as far as the customer is concerned, so the
+		// cart should not follow them around. WooCommerce also clears it on the
+		// order-received page; this covers the case where a template does not.
+		if ( WC()->cart ) {
+			WC()->cart->empty_cart();
+		}
+
+		$return_url = $this->get_return_url($order);
+
+		// Only claim success once the order is actually paid. While the webhook
+		// is still in flight the order stays pending or on-hold, and the
+		// order-received page shows the customer its real status.
+		if ( $order->is_paid() ) {
+			$return_url = add_query_arg('wc_status', 'success', $return_url);
+		}
+
+		wp_safe_redirect( $return_url );
+		exit;
 	}
 
 	public function get_error_message( $token ) {
