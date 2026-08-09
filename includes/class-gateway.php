@@ -98,8 +98,10 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 
 		// Actions
 		add_action('woocommerce_update_options_payment_gateways_'.$this->id, array($this, 'process_admin_options'), 100, 0);
-		add_action('woocommerce_receipt_'.$this->id, array($this, 'send_to_bank'));
-		add_action('woocommerce_api_'.strtolower(get_class($this)), array($this, 'return_from_bank'));
+		add_action('woocommerce_receipt_'.$this->id, array($this, 'redirect_to_paymento'));
+		// The endpoint name comes from the class name, not the callback, so the
+		// return URL merchants already have registered is unaffected by renames.
+		add_action('woocommerce_api_'.strtolower(get_class($this)), array($this, 'handle_payment_return'));
 		add_filter('woocommerce_get_order_item_totals', array($this, 'show_transaction_in_order'), 10, 2 );
 		add_filter( 'woocommerce_available_payment_gateways', array($this, 'filter_woocommerce_available_payment_gateways'), 10, 1 ); 
 
@@ -590,17 +592,17 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 		$order->update_meta_data('paymento-payment-token', $payment_token);
 		$order->save();
 		
-		$send_to_bank_url = add_query_arg('token', urlencode($payment_token), 'https://app.paymento.io/gateway');
-		wp_redirect($send_to_bank_url, 301);
+		$gateway_url = add_query_arg('token', urlencode($payment_token), 'https://app.paymento.io/gateway');
+		wp_redirect($gateway_url, 301);
 		exit;
 	}
-	
+
 	/**
-	 * Make ready for send to bank.
+	 * Render the receipt page and hand the customer over to Paymento.
 	 */
-	public function send_to_bank($order_id)
+	public function redirect_to_paymento($order_id)
 	{
-		esc_html_e('Thank you for your payment. redirecting to bank...', 'paymento-crypto-gateway');
+		esc_html_e('Thank you for your order. Redirecting you to Paymento to complete the payment...', 'paymento-crypto-gateway');
 		$this->get_payment_token($order_id);
 	}
 
@@ -618,7 +620,7 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 	 * straight from the request, which let anyone mark an order paid without
 	 * paying.
 	 */
-	public function return_from_bank() {
+	public function handle_payment_return() {
 
 		// No nonce: this is a public return URL reached by redirect from an
 		// external site. Nothing below trusts the request or changes any order.
@@ -674,19 +676,6 @@ class WC_PAYMENTO_Gateway extends WC_Payment_Gateway {
 
 		wp_safe_redirect( $return_url );
 		exit;
-	}
-
-	public function get_error_message( $token ) {
-		switch ($token) {
-			case 'soap':
-				return __('SOAP Client does not loaded in your server', 'paymento-crypto-gateway');
-				break;
-			case 'bank_connection':
-				return __('Connection to bank failed.', 'paymento-crypto-gateway');
-				break;
-			default:
-				return __('Unknown error', 'paymento-crypto-gateway');
-		}
 	}
 
 	public function show_transaction_in_order($total_rows, $order) {

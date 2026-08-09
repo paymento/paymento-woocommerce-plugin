@@ -178,6 +178,10 @@ Orders are now completed solely by Paymento's payment notification (IPN), which 
 
 **What this means for you:** if your store has been live with an earlier version, review recent orders that were marked paid but have no matching payment in your Paymento dashboard, particularly any order completed without a corresponding transaction.
 
+**🔧 Also in this release:**
+* Clearer wording on the redirect page shown while sending a customer to Paymento.
+* Removed leftover code and terminology inherited from a bank gateway template. Developers: the `send_to_bank()` and `return_from_bank()` methods are now `redirect_to_paymento()` and `handle_payment_return()`. The return URL itself is unchanged, so nothing needs reconfiguring.
+
 = 1.3.0 - 2026-08-08 =
 **⚡ Performance & Security Update**
 
